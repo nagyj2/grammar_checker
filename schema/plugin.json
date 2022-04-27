@@ -1,0 +1,8 @@
+{
+  "jupyter.lab.shortcuts": [],
+  "title": "grammar_checker",
+  "description": "grammar_checker settings.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}
