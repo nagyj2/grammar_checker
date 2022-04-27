@@ -27,8 +27,7 @@ import { IDisposable, DisposableDelegate } from '@lumino/disposable';
 // For type annotations
 // import { Cell } from '@jupyterlab/cells';
 import { CodeMirrorEditor } from '@jupyterlab/codemirror';
-// import { TextMarker, CodeMirror } from 'codemirror';
-import * as CM from 'codemirror'; // needed b/c apparently typescript cannot import `CodeMirror`
+import { TextMarker, Doc } from 'codemirror';
 
 // For throttling
 import _ from 'lodash';
@@ -42,11 +41,11 @@ interface GrammarResponse{
 // Global enable for the extension
 var enabled = true;
 // Tracking cells to their text markers
-var errorMarks: Map<CodeMirrorEditor, CM.TextMarker[]> = new Map();
+var errorMarks: Map<Doc, TextMarker[]> = new Map();
 
-function clearErrorMarks(editor: CodeMirrorEditor) {
+function clearErrorMarks(doc: Doc) {
 	// Wipe out all the old errors for the cell
-	errorMarks.get(editor)?.forEach((mark: CM.TextMarker) => {
+	errorMarks.get(doc)?.forEach((mark: TextMarker) => {
 		console.log('clear!');
 		mark.clear();
 	});
@@ -54,8 +53,8 @@ function clearErrorMarks(editor: CodeMirrorEditor) {
 
 function clearAllErrorMarks() {
 	// Wipe out all errors for all cells
-	errorMarks.forEach((marks: CM.TextMarker[]) => {
-		marks.forEach((mark: CM.TextMarker) => {
+	errorMarks.forEach((marks: TextMarker[]) => {
+		marks.forEach((mark: TextMarker) => {
 			console.log('clear!');
 			mark.clear();
 		})
@@ -63,7 +62,7 @@ function clearAllErrorMarks() {
 }
 
 // Create a POST request on the text inside the markdown cell
-function checkGrammar(editor: CodeMirrorEditor) {
+function checkGrammar(doc: Doc) {
 	if (enabled === false) {
 		console.log("Grammar checker is disabled.");
 		return;
@@ -71,31 +70,10 @@ function checkGrammar(editor: CodeMirrorEditor) {
 
 	// Get editor and clear cells associated with the editor
 	// var editor = cell.editor as CodeMirrorEditor;
-	clearErrorMarks(editor);
+	clearErrorMarks(doc);
 
-	
-	var text;
-	try { // The JupyterLab and on-change callback editors are different. Get text according to the type of input
-		text = editor.model.value.text;
-		console.log("Model:")
-		console.log(editor)
-	} catch (e) {
-		console.log("Children:")
-		console.log(editor)
-		text = (editor as any).getValue();
-	}
-
-	console.log(text);
-
-	// if (editor.hasOwnProperty('model')) {
-	// 	console.log("JupyterLab:");
-	// 	console.log(editor);
-	// 	text = editor.doc.getValue();
-	// } else {
-	// 	console.log("Callback:");
-	// 	console.log(editor);
-	// 	text = editor.model.value.text;
-	// }
+	// Get the text from the Doc(ument?)
+	var text = doc.getValue();
 
 	fetch('http://localhost:5000/check', {
 		method: 'POST',
@@ -107,20 +85,13 @@ function checkGrammar(editor: CodeMirrorEditor) {
 				// console.log(error);
 				
 				// Find where the error is
-				var start;
-				var end;
-				try {
-					start = editor.doc.posFromIndex(error.offset); // get objs with `line` and `ch` (column) info that markText needs
-					end = editor.doc.posFromIndex(error.offset + error.errorLength);
-				} catch (e) { // Again, JupyterLab initial is different from callback?
-					start = (editor as any).cm.doc.posFromIndex(error.offset);
-					end = (editor as any).cm.doc.posFromIndex(error.offset + error.errorLength);
-				}
-
+				var start = doc.posFromIndex(error.offset); // get objs with `line` and `ch` (column) info that markText needs
+				var end = doc.posFromIndex(error.offset + error.errorLength);
+				
 				// Determine the class (for styling) to add to the error message
 				var errorType = error.message.search('spelling') == -1 ? 'grammar-error' : 'spelling-error';
 				// Apply the error style to the text
-				errorMarks.get(editor as any)?.push(editor.doc.markText(start, end, {
+				errorMarks.get(doc)?.push(doc.markText(start, end, {
 					attributes: { 'data-text': '(' + error.message + ')' },
 					className: 'error-tooltip ' + errorType
 				}));
@@ -144,10 +115,12 @@ export class ButtonExtension implements DocumentRegistry.IWidgetExtension<Notebo
 			}
 		};
 
+		// Actual button which will get added
 		const bToggle = new ToolbarButton({
 			className: 'grammar-check-button',
-			label: 'Toggle',
-			icon: 'fa-check',
+			label: 'Toggle Grammar',
+			icon: 'fa-times',
+			pressedIcon: 'fa-check',
 			onClick: toggleChecker,
 			tooltip: 'Toggles the grammar checker',
 		});
@@ -170,6 +143,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 	activate: (app: JupyterFrontEnd, notebook: INotebookTools, settingRegistry: ISettingRegistry | null) => {
 		console.log('JupyterLab extension grammar_checker is activated!');
 
+		// Settings boilerplate in case I want it
 		if (settingRegistry) {
 			settingRegistry
 				.load(plugin.id)
@@ -183,42 +157,39 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
 		// setTimeout cannot take args, so checkCells cannot have any arguments - use closure to access panel
 		function checkActiveCell() {
-			const REFRESH_MS = 1000;
+			const REFRESH_MS = 500;
 
-			console.log(errorMarks);
+			// For tracking how many cells are registered in the system
+			// console.log(`errorMarks.size=${errorMarks.size}`);
 
-			// Cell to check. If possible, get Cell[]
+			// Check only the active cell. Couldn't find a way to get all Cells in the notebook
 			var cell /* Cell */ = notebook.activeCell;
 			
-			// If no active cell, reschedule and return
+			// If no active cell or non-markdown, reschedule and return
 			if (!cell || cell.model.type !== 'markdown') {
 				console.log(`Skipping active cell (type ${cell?.model.type}).`);
 				setTimeout(checkActiveCell, REFRESH_MS);
 				return;
 			}
 			
-			// Get the editor managing the cell
-			var editor = cell.editor as CodeMirrorEditor;
-			editor = (editor.doc as any).cm;
-			if (!errorMarks.has(editor)) {
-				// Need to cast to get full access to the codemirror methods
-				// https://stackoverflow.com/questions/67626233/how-can-i-get-a-reference-to-a-codemirror-instance-in-jupyterlab
-				errorMarks.set(editor, []); // Add entry for cell
+			// Get the Doc managing the cell -> editor seems different between JupyterLab and CodeMirror's on-change callback
+			// Need to cast to get full access to the codemirror methods
+			// https://stackoverflow.com/questions/67626233/how-can-i-get-a-reference-to-a-codemirror-instance-in-jupyterlab
+			var doc = (cell.editor as CodeMirrorEditor).doc;
+			if (!errorMarks.has(doc)) {
+				errorMarks.set(doc, []); // Add entry for cell to track errors and only update on edits
 				
 				// Check grammar for the current cell
 				// console.log("Checking active cell.");
-				// checkGrammar(editor);
+				checkGrammar(doc);
 				
-				editor.doc.on("change", _.throttle(
-					ed => { checkGrammar(ed); }, 300, // ed is the editor when a change occurs
+				// Attach on-change handler callback so we only recheck the grammar on modifications. 
+				// Throttled by lodash to prevent excessive calls to the backend server
+				doc.on("change", _.throttle(
+					moddoc => { checkGrammar(moddoc); }, 300, // moddoc is the Doc when a change occurs
 					{ leading: false, trailing: true }
 				));
 			}
-
-			// Set a throttled version of the checker to run whenever the cell is changed
-			// Not really applicable if using only active cell
-			//! Uses global `errorMarks`, so if we set this to many cells it will get messed up
-			// Used in reference implementation to attach a checker to each cell
 
 			// Set timeout
 			setTimeout(checkActiveCell, REFRESH_MS);
