@@ -14,26 +14,22 @@ import { ToolbarButton } from '@jupyterlab/apputils';
 // https://jupyterlab.readthedocs.io/en/stable/extension/documents.html#document-registry
 import { DocumentRegistry } from '@jupyterlab/docregistry';
 
-// Allows widgets to be destroyed
-import { IDisposable, DisposableDelegate } from '@lumino/disposable';
-
-// Notebook actions
+// Notebook manipulation
 import {
-	// NotebookActions,
 	NotebookPanel,
 	INotebookModel,
 	INotebookTools,
 } from '@jupyterlab/notebook';
 
-import {
-	ICodeMirror,
-	CodeMirrorEditor,
-} from '@jupyterlab/codemirror';
+// Allows widgets to be destroyed
+import { IDisposable, DisposableDelegate } from '@lumino/disposable';
 
-import {
-	TextMarker
-} from 'codemirror';
+// For type annotations
+// import { Cell } from '@jupyterlab/cells';
+import { CodeMirrorEditor } from '@jupyterlab/codemirror';
+import { TextMarker, Doc } from 'codemirror';
 
+// For throttling
 import _ from 'lodash';
 
 interface GrammarResponse{
@@ -42,30 +38,90 @@ interface GrammarResponse{
 	message: string;
 }
 
+// Global enable for the extension
 var enabled = true;
+// Tracking cells to their text markers
+var errorMarks: Map<Doc, TextMarker[]> = new Map();
 
-/**
- * A notebook widget extension that adds a button to the toolbar.
- */
+function clearErrorMarks(doc: Doc) {
+	// Wipe out all the old errors for the cell
+	errorMarks.get(doc)?.forEach((mark: TextMarker) => {
+		// console.log('clear!');
+		mark.clear();
+	});
+}
+
+function clearAllErrorMarks() {
+	// Wipe out all errors for all cells
+	errorMarks.forEach((marks: TextMarker[]) => {
+		marks.forEach((mark: TextMarker) => {
+			// console.log('clear!');
+			mark.clear();
+		})
+	});
+}
+
+// Create a POST request on the text inside the markdown cell
+function checkGrammar(doc: Doc) {
+	if (enabled === false) {
+		console.log("Grammar checker is disabled.");
+		return;
+	}
+
+	// Get editor and clear cells associated with the editor
+	// var editor = cell.editor as CodeMirrorEditor;
+	clearErrorMarks(doc);
+
+	// Get the text from the Doc(ument?)
+	var text = doc.getValue();
+
+	fetch('http://localhost:5000/check', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ markdown: text })
+	}).then((reply: Response) => {
+		reply.json().then((data: GrammarResponse[]) => {
+			data.forEach((error: GrammarResponse) => {
+				// console.log(error);
+				
+				// Find where the error is
+				var start = doc.posFromIndex(error.offset); // get objs with `line` and `ch` (column) info that markText needs
+				var end = doc.posFromIndex(error.offset + error.errorLength);
+				
+				// Determine the class (for styling) to add to the error message
+				var errorType = error.message.search('spelling') == -1 ? 'grammar-error' : 'spelling-error';
+				// Apply the error style to the text
+				errorMarks.get(doc)?.push(doc.markText(start, end, {
+					attributes: { 'data-text': '(' + error.message + ')' },
+					className: 'error-tooltip ' + errorType
+				}));
+			})
+		})
+	});
+}
+
+// Notebook widget extension which adds a new button to the toolbar
 export class ButtonExtension implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel> {
-	/**
-	 * Create a new extension for the notebook panel widget.
-	 *
-	 * @param panel Notebook panel
-	 * @param context Notebook context
-	 * @returns Disposable on the added button
-	 */
 	createNew(
 		panel: NotebookPanel,
 		context: DocumentRegistry.IContext<INotebookModel>
 	): IDisposable {
 		const toggleChecker = () => {
 			enabled = !enabled;
+			console.log(enabled ? "Grammar checker enabled." : "Grammar checker disabled.");
+			// If turning off, clear all error marks and reset map
+			if (!enabled) {
+				clearAllErrorMarks();
+				errorMarks = new Map();
+			}
 		};
 
+		// Actual button which will get added
 		const bToggle = new ToolbarButton({
 			className: 'grammar-check-button',
-			label: 'Toggle',
+			label: 'Toggle Grammar',
+			icon: 'fa-times',
+			pressedIcon: 'fa-check',
 			onClick: toggleChecker,
 			tooltip: 'Toggles the grammar checker',
 		});
@@ -77,57 +133,18 @@ export class ButtonExtension implements DocumentRegistry.IWidgetExtension<Notebo
 	}
 }
 
-function clearErrorMarks(errorMarks: TextMarker[]) {
-	errorMarks.forEach((mark: TextMarker) => {
-		console.log('clear!');
-		mark.clear();
-	});
-}
-
-// Create a POST request on the text inside the markdown cell
-function checkGrammar(editor: CodeMirrorEditor, errorMarks: TextMarker[]) {
-	if (!enabled) {
-		console.log("Grammar checker is disabled.");
-		return;
-	}
-
-	fetch('http://localhost:5000/check', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ markdown: editor.model.value.text })
-	}).then((reply: Response) => { // todo find these types
-		reply.json().then((data: GrammarResponse[]) => {
-			data.forEach((error: GrammarResponse) => {
-				// console.log(error);
-				
-				// Find where the error is
-				var start = editor.doc.posFromIndex(error.offset); // get objs with `line` and `ch` (column) info that markText needs
-				var end = editor.doc.posFromIndex(error.offset + error.errorLength);
-
-				// Determine the class (for styling) to add to the error message
-				var errorType = error.message.search('spelling') == -1 ? 'grammar-error' : 'spelling-error';
-				// Apply the error style to the text
-				errorMarks.push(editor.doc.markText(start, end, {
-					attributes: { 'data-text': '(' + error.message + ')' },
-					className: 'error-tooltip ' + errorType
-				}));
-			})
-		})
-	});
-
-}
-
 /**
  * Initialization data for the grammar_checker extension.
  */
 const plugin: JupyterFrontEndPlugin<void> = {
 	id: 'grammar_checker:plugin',
 	autoStart: true,
-	requires: [INotebookTools, ICodeMirror],
+	requires: [INotebookTools],
 	optional: [ISettingRegistry],
-	activate: (app: JupyterFrontEnd, notebook: INotebookTools, cm: ICodeMirror, settingRegistry: ISettingRegistry | null) => {
+	activate: (app: JupyterFrontEnd, notebook: INotebookTools, settingRegistry: ISettingRegistry | null) => {
 		console.log('JupyterLab extension grammar_checker is activated!');
 
+		// Settings boilerplate in case I want it
 		if (settingRegistry) {
 			settingRegistry
 				.load(plugin.id)
@@ -139,43 +156,42 @@ const plugin: JupyterFrontEndPlugin<void> = {
 				});
 		}
 
-		// Set panel to the current active panel
-		// var panel = notebook.activeNotebookPanel;
-		var errorMarks: TextMarker[] = [];
-
 		// setTimeout cannot take args, so checkCells cannot have any arguments - use closure to access panel
 		function checkActiveCell() {
-			const REFRESH_MS = 1000;
+			const REFRESH_MS = 500;
 
-			// Cell to check. If possible, get Cell[]
+			// For tracking how many cells are registered in the system
+			// console.log(`errorMarks.size=${errorMarks.size}`);
+
+			// Check only the active cell. Couldn't find a way to get all Cells in the notebook
 			var cell /* Cell */ = notebook.activeCell;
 			
-			// If no active cell, reschedule and return
+			// If no active cell or non-markdown, reschedule and return
 			if (!cell || cell.model.type !== 'markdown') {
 				console.log(`Skipping active cell (type ${cell?.model.type}).`);
 				setTimeout(checkActiveCell, REFRESH_MS);
 				return;
 			}
 			
+			// Get the Doc managing the cell -> editor seems different between JupyterLab and CodeMirror's on-change callback
 			// Need to cast to get full access to the codemirror methods
 			// https://stackoverflow.com/questions/67626233/how-can-i-get-a-reference-to-a-codemirror-instance-in-jupyterlab
-			var editor = cell.editor as CodeMirrorEditor;
-			
-			clearErrorMarks(errorMarks);
-			errorMarks = []; // Reset here b/c we want to capture the errorMarks from the previous scope
-			
-			// Check grammar for the current cell
-			console.log("Checking active cell.");
-			checkGrammar(editor, errorMarks);
-
-			// Set a throttled version of the checker to run whenever the cell is changed
-			// Not really applicable if using only active cell
-			//! Uses global `errorMarks`, so if we set this to many cells it will get messed up
-			// Used in reference implementation to attach a checker to each cell
-			// editor.doc.on("change", _.throttle(
-			// 	ed => checkGrammar(ed, errorMarks), 300,
-			// 	{ leading: false, trailing: true }
-			// ));
+			var doc = (cell.editor as CodeMirrorEditor).doc;
+			if (!errorMarks.has(doc)) {
+				console.log("Adding active cell.");
+				errorMarks.set(doc, []); // Add entry for cell to track errors and only update on edits
+				
+				// Check grammar for the current cell
+				// console.log("Checking active cell.");
+				checkGrammar(doc);
+				
+				// Attach on-change handler callback so we only recheck the grammar on modifications. 
+				// Throttled by lodash to prevent excessive calls to the backend server
+				doc.on("change", _.throttle(
+					moddoc => { checkGrammar(moddoc); }, 300, // moddoc is the Doc when a change occurs
+					{ leading: false, trailing: true }
+				));
+			}
 
 			// Set timeout
 			setTimeout(checkActiveCell, REFRESH_MS);
