@@ -7,9 +7,41 @@ Adds a grammar checker for markdown cells.
 
 - JupyterLab >= 3.0
 
-## Install
+## Installation
 
-To install the extension, **from the project root** execute:
+Before proceeding, please ensure you have access to the [4TB3 Group 01 Project Repo](https://gitlab.cas.mcmaster.ca/cs4tb3-winter22/group-01) as their backend is used with this extension. The setup of the two servers below is taken verbatim from their repository.
+
+### Markdown Parser Node Server
+-----------------------------------
+##### Requirements
+To run the markdown parser server, execute the following commands  in the `server\markdown_parser` directory. The server will listen on port 3000 by default. 
+
+```bash
+npm install
+```
+
+```bash
+node server.js
+```
+### Grammar Checker Flask Server
+-----------------------------------
+##### Requirements
+To run the LanguageTool server, execute the following commands in the `server\grammar_checker` directory. The server will listen on port 5000 by default. 
+```bash
+pip install -r requirements.txt
+```
+```bash
+set FLASK_APP=app
+flask run
+```
+
+**Note:** This is Python wrapper around a Java LanguageTool server, so your system must have JRE installed.
+### Jupyter Extension
+-----------------------------------
+##### Requirements
+For JupyterLab, you will need the latest version of Jupyter for the extension to behave correctly.
+
+To install the extension, execute from this project's root directory:
 
 ```bash
 jlpm install:extension
