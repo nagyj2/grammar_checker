@@ -46,7 +46,7 @@ var errorMarks: Map<Doc, TextMarker[]> = new Map();
 function clearErrorMarks(doc: Doc) {
 	// Wipe out all the old errors for the cell
 	errorMarks.get(doc)?.forEach((mark: TextMarker) => {
-		console.log('clear!');
+		// console.log('clear!');
 		mark.clear();
 	});
 }
@@ -55,7 +55,7 @@ function clearAllErrorMarks() {
 	// Wipe out all errors for all cells
 	errorMarks.forEach((marks: TextMarker[]) => {
 		marks.forEach((mark: TextMarker) => {
-			console.log('clear!');
+			// console.log('clear!');
 			mark.clear();
 		})
 	});
@@ -108,6 +108,7 @@ export class ButtonExtension implements DocumentRegistry.IWidgetExtension<Notebo
 	): IDisposable {
 		const toggleChecker = () => {
 			enabled = !enabled;
+			console.log(enabled ? "Grammar checker enabled." : "Grammar checker disabled.");
 			// If turning off, clear all error marks and reset map
 			if (!enabled) {
 				clearAllErrorMarks();
@@ -177,6 +178,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 			// https://stackoverflow.com/questions/67626233/how-can-i-get-a-reference-to-a-codemirror-instance-in-jupyterlab
 			var doc = (cell.editor as CodeMirrorEditor).doc;
 			if (!errorMarks.has(doc)) {
+				console.log("Adding active cell.");
 				errorMarks.set(doc, []); // Add entry for cell to track errors and only update on edits
 				
 				// Check grammar for the current cell
