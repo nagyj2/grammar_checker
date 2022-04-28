@@ -39,6 +39,8 @@ interface GrammarResponse{
 }
 
 // Global enable for the extension
+// var grammarChecker: GrammarButton;
+var enabled: boolean = true;
 var REFRESH_MS: number = 500;
 var CALLBACK_MS: number = 300;
 // Tracking cells to their text markers
@@ -52,19 +54,20 @@ function clearErrorMarks(doc: Doc) {
 	});
 }
 
-function clearAllErrorMarks() {
-	// Wipe out all errors for all cells
-	errorMarks.forEach((marks: TextMarker[]) => {
+function clearAllErrorMarksAndCallbacks() {
+	// Wipe out all errors for all cells and the callback
+	errorMarks.forEach((marks: TextMarker[], doc: Doc) => {
 		marks.forEach((mark: TextMarker) => {
 			// console.log('clear!');
 			mark.clear();
 		})
+		doc.on('change', () => { });
 	});
 }
 
 // Create a POST request on the text inside the markdown cell
 function checkGrammar(doc: Doc) {
-	if (enabled === false) {
+	if (!enabled) {
 		console.log("Grammar checker is disabled.");
 		return;
 	}
@@ -101,30 +104,36 @@ function checkGrammar(doc: Doc) {
 	});
 }
 
-// Notebook widget extension which adds a new button to the toolbar
-export class ButtonExtension implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel> {
+// grammar button functionality
+class GrammarButton extends ToolbarButton {
+	get onClick() {
+		return () => {
+			enabled = !enabled;
+			console.log(`Grammar checker is now ${enabled ? "enabled" : "disabled"}`);
+			// If turning off, clear all error marks and reset map
+			if (!enabled) {
+				clearAllErrorMarksAndCallbacks();
+				errorMarks = new Map();
+			}
+		}
+	}
+}
+
+// Factory which appends a button to the toolbar
+export class GrammarExtension implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel> {
+	
 	createNew(
 		panel: NotebookPanel,
 		context: DocumentRegistry.IContext<INotebookModel>
 	): IDisposable {
-		const toggleChecker = () => {
-			enabled = !enabled;
-			console.log(enabled ? "Grammar checker enabled." : "Grammar checker disabled.");
-			// If turning off, clear all error marks and reset map
-			if (!enabled) {
-				clearAllErrorMarks();
-				errorMarks = new Map();
-			}
-		};
 
 		// Actual button which will get added
-		const bToggle = new ToolbarButton({
-			className: 'grammar-check-button',
-			label: 'Toggle Grammar',
+		const bToggle = new GrammarButton({
+			className: 'grammar-check-button grammar-check-enabled',
+			label: 'Grammar',
 			icon: 'fa-times',
 			pressedIcon: 'fa-check',
-			onClick: toggleChecker,
-			tooltip: 'Toggles the grammar checker',
+			tooltip: 'Toggles the grammar checker'
 		});
 
 		panel.toolbar.insertItem(10, 'toggleGrammar', bToggle);
@@ -133,6 +142,7 @@ export class ButtonExtension implements DocumentRegistry.IWidgetExtension<Notebo
 		});
 	}
 }
+
 
 /**
  * Initialization data for the grammar_checker extension.
@@ -179,11 +189,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
 				return;
 			}
 			
-			// Get the Doc managing the cell -> editor seems different between JupyterLab and CodeMirror's on-change callback
+			// Get the Doc managing the cell -> Cannot use editor b/c CodeMirror's callback provides the Doc
 			// Need to cast to get full access to the codemirror methods
 			// https://stackoverflow.com/questions/67626233/how-can-i-get-a-reference-to-a-codemirror-instance-in-jupyterlab
 			var doc = (cell.editor as CodeMirrorEditor).doc;
-			if (!errorMarks.has(doc)) {
+			if (enabled && !errorMarks.has(doc)) {
 				console.log("Adding active cell.");
 				errorMarks.set(doc, []); // Add entry for cell to track errors and only update on edits
 				
@@ -207,7 +217,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 		checkActiveCell();
 
 		// Add button to the toolbar
-		app.docRegistry.addWidgetExtension('Notebook', new ButtonExtension());
+		app.docRegistry.addWidgetExtension('Notebook', new GrammarExtension());
 	}
 };
 
