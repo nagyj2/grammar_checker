@@ -9,6 +9,8 @@ app = Flask(__name__)
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 
+print("Listening on port 5000!") # Default for Flask
+
 # Monkey patch for languagetool to use AnnotatedText instead of plain text
 def create_params(self, text):
     params = {'language': str(self.language), 'data': text}
