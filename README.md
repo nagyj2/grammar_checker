@@ -1,20 +1,26 @@
 # grammar_checker
 
 [![Github Actions Status](https://gitthub.com/nagyj2/grammar_checker/workflows/Build/badge.svg)](https://gitthub.com/nagyj2/grammar_checker/actions/workflows/build.yml)[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/https://gitthub.com/nagyj2/grammar_checker/main?urlpath=lab)
-Adds a grammar checker for markdown cells.
+Adds a grammar checker for markdown cells using LanguageTool. This extension is based off of the Classic JupyterHub grammar checker extension by Ritesh Patel, Sunny Bhatt and Tahseen Ahmed.
 
 ## Requirements
 
 - JupyterLab >= 3.0
+- python3
+- python3-flask
+- npm
+- JRE
 
 ## Installation
 
-Before proceeding, please ensure you have access to the [4TB3 Group 01 Project Repo](https://gitlab.cas.mcmaster.ca/cs4tb3-winter22/group-01) as their backend is used with this extension. The setup of the two servers below is taken verbatim from their repository.
+The grammar checker relies on two back-end servers to work. The primary server `server\grammar_checker` runs [LanguageTool](https://languagetool.org/) on the [Annotatedtext](https://github.com/prosegrinder/annotatedtext) output of the second server `server\markdown_parser`. Both of the servers included in this repository are available in the `server` directory and are taken from the Classic Jupyter extension.
+
+<!-- The server execution process can be seen below: -->
 
 ### Markdown Parser Node Server
 -----------------------------------
 ##### Requirements
-To run the markdown parser server, execute the following commands  in the `server\markdown_parser` directory. The server will listen on port 3000 by default. 
+This server takes markdown text in and converts it to AnnotatedText. To run the markdown parser server, execute the following commands  in the `server\markdown_parser` directory. The server will listen on port 3000 by default. 
 
 ```bash
 npm install
@@ -26,7 +32,7 @@ node server.js
 ### Grammar Checker Flask Server
 -----------------------------------
 ##### Requirements
-To run the LanguageTool server, execute the following commands in the `server\grammar_checker` directory. The server will listen on port 5000 by default. 
+This server is the interface between the front-end and back-end. It takes markdown text as input, sends it to `server\markdown_parser` to get AnnotatedText and then uses LanguageTool to parse the AnnotatedText. The output error messages from LanguageTool are then sent back to the front-end. To run the LanguageTool server, execute the following commands in the `server\grammar_checker` directory. The server will listen on port 5000 by default. 
 ```bash
 pip install -r requirements.txt
 ```
