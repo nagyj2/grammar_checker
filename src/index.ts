@@ -39,7 +39,8 @@ interface GrammarResponse{
 }
 
 // Global enable for the extension
-var enabled = true;
+var REFRESH_MS: number = 500;
+var CALLBACK_MS: number = 300;
 // Tracking cells to their text markers
 var errorMarks: Map<Doc, TextMarker[]> = new Map();
 
@@ -149,7 +150,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
 			settingRegistry
 				.load(plugin.id)
 				.then(settings => {
+					// fix not sure if working - development install issue?
 					console.log('grammar_checker settings loaded:', settings.composite);
+					if (settings.composite['refresh_ms'] !== undefined) {
+						REFRESH_MS = settings.composite['refresh_ms'] as number;
+					}
+					if (settings.composite['callback_refresh_ms'] !== undefined) {
+						CALLBACK_MS = settings.composite['callback_refresh_ms'] as number;
+					}
 				})
 				.catch(reason => {
 					console.error('Failed to load settings for grammar_checker.', reason);
@@ -158,8 +166,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
 		// setTimeout cannot take args, so checkCells cannot have any arguments - use closure to access panel
 		function checkActiveCell() {
-			const REFRESH_MS = 500;
-
 			// For tracking how many cells are registered in the system
 			// console.log(`errorMarks.size=${errorMarks.size}`);
 
@@ -188,7 +194,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 				// Attach on-change handler callback so we only recheck the grammar on modifications. 
 				// Throttled by lodash to prevent excessive calls to the backend server
 				doc.on("change", _.throttle(
-					moddoc => { checkGrammar(moddoc); }, 300, // moddoc is the Doc when a change occurs
+					moddoc => { checkGrammar(moddoc); }, CALLBACK_MS, // moddoc is the Doc when a change occurs
 					{ leading: false, trailing: true }
 				));
 			}

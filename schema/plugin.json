@@ -1,8 +1,23 @@
 {
-  "jupyter.lab.shortcuts": [],
-  "title": "grammar_checker",
-  "description": "grammar_checker settings.",
   "type": "object",
-  "properties": {},
-  "additionalProperties": false
+  "title": "Grammar Checker",
+  "description": "Settings for the grammar_checker extension.",
+  "jupyter.lab.setting-icon": "ui-components:settings",
+  "jupyter.lab.setting-icon-label": "Grammar Checker",
+  "properties": {
+    "refresh_ms": {
+      "title": "Grammar Refresh Rate",
+      "description": "How frequently the main grammar checker should run.",
+      "type": "number",
+      "default": 500
+    },
+    "callback_refresh_ms": {
+      "title": "Callback Refresh Throttle",
+      "description": "Fastest time between grammar check calls when editing a cell.",
+      "type": "number",
+      "default": 300
+    }
+  },
+  "additionalProperties": false,
+  "jupyter.lab.shortcuts": []
 }
