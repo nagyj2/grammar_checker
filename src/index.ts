@@ -79,9 +79,9 @@ function checkGrammar(doc: Doc) {
 	// Get the text from the Doc(ument?)
 	var text = doc.getValue();
 
-	fetch('http://localhost:5000/check', {
+	fetch('http://localhost:5050/process', {
 		method: 'POST',
-		headers: { 'content-type': 'application/json' },
+		headers: { 'content-type': 'application/json', 'Access-Control-Allow-Origin': '*' },
 		body: JSON.stringify({ markdown: text })
 	}).then((reply: Response) => {
 		reply.json().then((data: GrammarResponse[]) => {

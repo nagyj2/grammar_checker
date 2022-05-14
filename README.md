@@ -13,35 +13,8 @@ Adds a grammar checker for markdown cells using LanguageTool. This extension is 
 
 ## Installation
 
-The grammar checker relies on two back-end servers to work. The primary server `server\grammar_checker` runs [LanguageTool](https://languagetool.org/) on the [Annotatedtext](https://github.com/prosegrinder/annotatedtext) output of the second server `server\markdown_parser`. Both of the servers included in this repository are available in the `server` directory and are taken from the Classic Jupyter extension.
+The grammar checker relies on two back-end servers to work, hosted at [JupyterLab Util Server repository](https://gitlab.cas.mcmaster.ca/nagyj2/jupyterlab-util-server). The main server must be running on port 5050 for the grammar checking functionality to work. There is currently no way to change the port this extension sends to without modifying the source code.
 
-<!-- The server execution process can be seen below: -->
-
-### Markdown Parser Node Server
------------------------------------
-##### Requirements
-This server takes markdown text in and converts it to AnnotatedText. To run the markdown parser server, execute the following commands  in the `server\markdown_parser` directory. The server will listen on port 3000 by default. 
-
-```bash
-npm install
-```
-
-```bash
-node server.js
-```
-### Grammar Checker Flask Server
------------------------------------
-##### Requirements
-This server is the interface between the front-end and back-end. It takes markdown text as input, sends it to `server\markdown_parser` to get AnnotatedText and then uses LanguageTool to parse the AnnotatedText. The output error messages from LanguageTool are then sent back to the front-end. To run the LanguageTool server, execute the following commands in the `server\grammar_checker` directory. The server will listen on port 5000 by default. 
-```bash
-pip install -r requirements.txt
-```
-```bash
-set FLASK_APP=app
-flask run
-```
-
-**Note:** This is Python wrapper around a Java LanguageTool server, so your system must have JRE installed.
 ### Jupyter Extension
 -----------------------------------
 ##### Requirements
